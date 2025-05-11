@@ -1,0 +1,7 @@
+textual>=0.27.0
+psutil>=5.9.0
+matplotlib>=3.5.0
+numpy>=1.22.0
+pillow>=9.0.0
+pyamdgpu>=0.2.0  # Required for AMD GPU monitoring
+pyyaml>=6.0      # Required for configuration file parsing
