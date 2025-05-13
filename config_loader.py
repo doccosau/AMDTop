@@ -1,16 +1,29 @@
 #!/usr/bin/env python3
 """
 Configuration loader for AMDTop
+Handles loading, saving, and validating configuration
 """
 import os
+import sys
 import yaml
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from pathlib import Path
 
-# Default configuration
-DEFAULT_CONFIG = {
+@dataclass
+class ConfigPaths:
+    """Configuration file paths"""
+    LOCAL: str = "./config.yaml"
+    USER: str = "~/.config/amdtop/config.yaml"
+    SYSTEM: str = "/etc/amdtop/config.yaml"
+
+# Default configuration with type hints
+DEFAULT_CONFIG: Dict[str, Any] = {
     "intervals": {
-        "graphs": 1.0,
-        "processes": 2.0,
+        "graphs": 1.0,        # Update interval for graphs (seconds)
+        "processes": 2.0,     # Update interval for process list
+        "temperature": 5.0,   # Update interval for temperature sensors
+        "network": 1.0,       # Update interval for network stats
     },
     "colors": {
         "cpu_graph": "green",
@@ -20,153 +33,188 @@ DEFAULT_CONFIG = {
         "disk_write": "red",
         "network_download": "green",
         "network_upload": "orange",
+        "temperature": "orange",
+        "warning": "yellow",
+        "error": "red",
     },
     "display": {
-        "graph_history": 60,
-        "process_count": 10,
-        "partition_count": 3,
-        "interface_count": 3,
+        "graph_history": 60,    # Number of points in graphs
+        "process_count": 10,    # Number of processes to show
+        "partition_count": 3,   # Number of disk partitions to show
+        "interface_count": 3,   # Number of network interfaces to show
+        "show_gpu": True,       # Show GPU information if available
+        "show_temperature": True,  # Show temperature information
+        "compact_mode": False,  # Use compact display mode
     },
-    "default_tab": "system",  # Options: system, disk, network, temperature
-    "theme": "dark",  # Options: dark, light
+    "alerts": {
+        "cpu_temp_warning": 70,   # CPU temperature warning threshold (°C)
+        "cpu_temp_critical": 85,  # CPU temperature critical threshold
+        "gpu_temp_warning": 75,   # GPU temperature warning threshold
+        "gpu_temp_critical": 90,  # GPU temperature critical threshold
+        "enable_notifications": True,  # Enable system notifications
+    },
+    "default_tab": "system",    # Options: system, disk, network, temperature
+    "theme": "dark",           # Options: dark, light
+    "log_level": "INFO",       # Options: DEBUG, INFO, WARNING, ERROR
 }
 
-def load_config(config_path: str = None) -> Dict[str, Any]:
+def validate_config(config: Dict[str, Any]) -> Dict[str, str]:
     """
-    Load configuration from a YAML file.
-    
+    Validate configuration values and return any errors
+
     Args:
-        config_path: Path to the configuration file. If None, looks in standard locations.
-        
+        config: Configuration dictionary to validate
+
     Returns:
-        Dict containing the configuration.
+        Dictionary of validation errors (empty if valid)
     """
-    # Configuration file search paths
+    errors = {}
+
+    # Validate intervals
+    for key, value in config.get("intervals", {}).items():
+        if not isinstance(value, (int, float)) or value <= 0:
+            errors[f"intervals.{key}"] = f"Must be a positive number, got {value}"
+
+    # Validate display counts
+    for key, value in config.get("display", {}).items():
+        if key.endswith("_count"):
+            if not isinstance(value, int) or value <= 0:
+                errors[f"display.{key}"] = f"Must be a positive integer, got {value}"
+
+    # Validate temperature thresholds
+    alerts = config.get("alerts", {})
+    if alerts.get("cpu_temp_warning", 0) >= alerts.get("cpu_temp_critical", 100):
+        errors["alerts.cpu_temp"] = "Warning temperature must be lower than critical"
+    if alerts.get("gpu_temp_warning", 0) >= alerts.get("gpu_temp_critical", 100):
+        errors["alerts.gpu_temp"] = "Warning temperature must be lower than critical"
+
+    return errors
+
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Load configuration from a YAML file with validation
+
+    Args:
+        config_path: Optional path to configuration file
+
+    Returns:
+        Validated configuration dictionary
+    """
+    paths = ConfigPaths()
     search_paths = [
-        # Current directory
-        "./config.yaml",
-        # User's home directory
-        os.path.expanduser("~/.config/amdtop/config.yaml"),
-        # System-wide configuration
-        "/etc/amdtop/config.yaml",
+        config_path if config_path else None,
+        paths.LOCAL,
+        os.path.expanduser(paths.USER),
+        paths.SYSTEM
     ]
-    
-    # If a specific path is provided, check it first
-    if config_path:
-        search_paths.insert(0, config_path)
-    
-    # Try to load from each path
+
     config = DEFAULT_CONFIG.copy()
-    for path in search_paths:
+    loaded = False
+
+    for path in filter(None, search_paths):
         try:
             with open(path, 'r') as f:
                 loaded_config = yaml.safe_load(f)
                 if loaded_config:
-                    # Merge with default config (deep update)
                     deep_update(config, loaded_config)
                     print(f"Loaded configuration from {path}")
+                    loaded = True
                     break
         except FileNotFoundError:
             continue
+        except yaml.YAMLError as e:
+            print(f"YAML error in config file {path}: {e}", file=sys.stderr)
+            continue
         except Exception as e:
-            print(f"Error loading configuration from {path}: {e}")
-    
+            print(f"Error reading config file {path}: {e}", file=sys.stderr)
+            continue
+
+    if not loaded:
+        print("No configuration file found, using defaults")
+
+    # Validate configuration
+    errors = validate_config(config)
+    if errors:
+        print("Configuration validation errors:", file=sys.stderr)
+        for key, error in errors.items():
+            print(f"  {key}: {error}", file=sys.stderr)
+
     return config
 
 def deep_update(original: Dict, update: Dict) -> Dict:
-    """
-    Recursively update a dictionary.
-    
-    Args:
-        original: Original dictionary to update
-        update: Dictionary with updates
-        
-    Returns:
-        Updated dictionary
-    """
+    """Recursively update a dictionary"""
     for key, value in update.items():
-        if key in original and isinstance(original[key], dict) and isinstance(value, dict):
+        if (
+            key in original 
+            and isinstance(original[key], dict) 
+            and isinstance(value, dict)
+        ):
             deep_update(original[key], value)
         else:
             original[key] = value
     return original
 
-def get_config_path(config_path: str = None) -> str:
+def save_config(config: Dict[str, Any], path: Optional[str] = None) -> bool:
     """
-    Get the path to the configuration file.
-    
-    Args:
-        config_path: Path to the configuration file. If None, looks in standard locations.
-        
-    Returns:
-        Path to the configuration file.
-    """
-    # Configuration file search paths
-    search_paths = [
-        # Current directory
-        "./config.yaml",
-        # User's home directory
-        os.path.expanduser("~/.config/amdtop/config.yaml"),
-        # System-wide configuration
-        "/etc/amdtop/config.yaml",
-    ]
-    
-    # If a specific path is provided, check it first
-    if config_path:
-        search_paths.insert(0, config_path)
-    
-    # Try to find an existing config file
-    for path in search_paths:
-        if os.path.exists(path):
-            return path
-    
-    # If no config file exists, use the user's home directory
-    return os.path.expanduser("~/.config/amdtop/config.yaml")
+    Save configuration to a YAML file
 
-def save_config(config: Dict[str, Any], path: str = None) -> None:
-    """
-    Save configuration to a YAML file.
-    
     Args:
-        config: Configuration dictionary
-        path: Path where to save the configuration file. If None, uses the default path.
+        config: Configuration dictionary to save
+        path: Optional path to save to (default: user config path)
+
+    Returns:
+        True if save was successful, False otherwise
     """
     if path is None:
-        path = get_config_path()
-        
+        path = os.path.expanduser(ConfigPaths.USER)
+
     try:
-        # Create directory if it doesn't exist
-        directory = os.path.dirname(path)
-        if directory and not os.path.exists(directory):
-            os.makedirs(directory)
-        
-        # Write configuration
+        # Validate before saving
+        errors = validate_config(config)
+        if errors:
+            print("Invalid configuration, not saving:", file=sys.stderr)
+            for key, error in errors.items():
+                print(f"  {key}: {error}", file=sys.stderr)
+            return False
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # Save configuration
         with open(path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-        print(f"Saved configuration to {path}")
-    except Exception as e:
-        print(f"Error saving configuration to {path}: {e}")
+        print(f"Configuration saved to {path}")
+        return True
 
-def create_default_config(path: str = "./config.yaml") -> None:
-    """
-    Create a default configuration file.
-    
-    Args:
-        path: Path where to create the configuration file
-    """
-    try:
-        # Create directory if it doesn't exist
-        directory = os.path.dirname(path)
-        if directory and not os.path.exists(directory):
-            os.makedirs(directory)
-        
-        # Write default configuration
-        with open(path, 'w') as f:
-            yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False, sort_keys=False)
-        print(f"Created default configuration at {path}")
     except Exception as e:
-        print(f"Error creating default configuration at {path}: {e}")
+        print(f"Error saving configuration to {path}: {e}", file=sys.stderr)
+        return False
 
+def create_default_config(path: str = "./config.yaml") -> bool:
+    """Create a default configuration file"""
+    return save_config(DEFAULT_CONFIG, path)
+
+# Test module if run directly
 if __name__ == "__main__":
-    # If run directly, create a default configuration file
-    create_default_config()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="AMDTop Configuration Manager")
+    parser.add_argument("--create", action="store_true", 
+                       help="Create default configuration file")
+    parser.add_argument("--validate", action="store_true",
+                       help="Validate existing configuration")
+    parser.add_argument("--path", help="Path to configuration file")
+    
+    args = parser.parse_args()
+
+    if args.create:
+        create_default_config(args.path if args.path else ConfigPaths.LOCAL)
+    elif args.validate:
+        config = load_config(args.path)
+        errors = validate_config(config)
+        if not errors:
+            print("Configuration is valid")
+    else:
+        print("Current configuration:")
+        config = load_config(args.path)
+        yaml.dump(config, sys.stdout, default_flow_style=False)

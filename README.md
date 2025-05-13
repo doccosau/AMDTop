@@ -1,139 +1,185 @@
 # AMDTop
 
-A TUI (Text User Interface) application for monitoring AMD CPU/GPU systems in real-time.
+A powerful TUI (Text User Interface) application for monitoring AMD CPU/GPU systems in real-time, built with Python and Textual.
 
-## Features
+![AMDTop Screenshot](docs/images/amdtop-screenshot.png)
 
-- **CPU Monitoring**: Real-time CPU usage graph
-- **GPU Monitoring**: Real-time GPU temperature graph
-- **Memory Monitoring**: Real-time RAM usage graph
-- **Disk I/O Monitoring**: Real-time disk read/write speeds
-- **Network Monitoring**: Real-time network upload/download speeds
-- **Process Monitoring**: Display of top CPU-consuming processes
-- **Customizable**: Configuration file for colors, update intervals, and display options
+## ✨ Features
 
-## Installation
+- 📊 **Real-time Monitoring**
+  - CPU usage and frequency
+  - GPU temperature and utilization
+  - Memory usage and swap
+  - Disk I/O speeds
+  - Network traffic
+  - Process activities
 
-1. Clone this repository:
-   \`\`\`
-   git clone https://github.com/yourusername/amdtop.git
-   cd amdtop
-   \`\`\`
+- 🎨 **Advanced UI**
+  - Live updating graphs
+  - Dark and light themes
+  - Customizable colors
+  - Keyboard shortcuts
+  - Multiple view modes
 
-2. Install the required dependencies:
-   \`\`\`
-   pip install -r requirements.txt
-   \`\`\`
+- ⚙️ **Smart Configuration**
+  - YAML-based configuration
+  - Multiple config locations
+  - Command-line options
+  - Auto-saving settings
 
-3. For AMD GPU monitoring, you'll need to install pyamdgpu:
-   \`\`\`
-   pip install pyamdgpu
-   \`\`\`
-   Note: This might require additional system dependencies.
+## 🚀 Quick Start
 
-## Usage
+### Prerequisites
 
-Run the application:
+```bash
+# For Ubuntu/Debian
+sudo apt install python3-dev python3-pip lm-sensors
 
-\`\`\`
-python amdtop.py
-\`\`\`
+# For Fedora
+sudo dnf install python3-devel python3-pip lm_sensors
 
-### Command Line Options
+# For Arch Linux
+sudo pacman -S python-pip lm_sensors
+```
 
-- `-c, --config`: Specify a custom configuration file path
-- `--create-config`: Create a default configuration file in the current directory
+### Installation
 
-Example:
-\`\`\`
-python amdtop.py --create-config
-python amdtop.py -c /path/to/your/config.yaml
-\`\`\`
+1. **Clone and Install**
+```bash
+git clone https://github.com/yourusername/amdtop.git
+cd amdtop
+./install.sh
+```
 
-## Configuration
+2. **Run AMDTop**
+```bash
+amdtop
+```
 
-AMDTop can be customized using a YAML configuration file. The application looks for configuration in the following locations (in order):
+## ⌨️ Key Bindings
 
-1. Path specified with the `-c` or `--config` command line option
-2. `./config.yaml` (current directory)
-3. `~/.config/amdtop/config.yaml` (user's home directory)
-4. `/etc/amdtop/config.yaml` (system-wide configuration)
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `h` | Help |
+| `t` | Toggle Theme |
+| `1-4` | Switch Tabs |
+| `r` | Reset Graphs |
+| `p` | Pause/Resume |
 
-To create a default configuration file:
+## 🔧 Configuration
 
-\`\`\`
-python amdtop.py --create-config
-\`\`\`
+Create default config:
+```bash
+amdtop --create-config
+```
 
-### Configuration Options
+Config locations (in priority order):
+1. Custom path (`-c` option)
+2. `./config.yaml`
+3. `~/.config/amdtop/config.yaml`
+4. `/etc/amdtop/config.yaml`
 
-\`\`\`yaml
-# Update intervals (in seconds)
+### Sample Configuration
+
+```yaml
 intervals:
-  # How often to update the graphs and metrics
   graphs: 1.0
   processes: 2.0
-  
-# Colors for graphs and UI elements
-colors:
-  # Graph colors
-  cpu_graph: "green"
-  gpu_graph: "red"
-  memory_graph: "blue"
-  disk_read: "blue"
-  disk_write: "red"
-  network_download: "green"
-  network_upload: "orange"
-  
-  # UI theme colors
-  background: "#1f1d2e"
-  header_background: "#2d2b3a"
-  widget_background: "#252336"
-  widget_border: "#3d3b4a"
-  tab_active: "#4d4b5a"
-  tab_hover: "#3d3b4a"
-  
-# Display settings
+  temperature: 5.0
+  network: 1.0
+
 display:
-  # Number of data points to keep in graphs (history length)
   graph_history: 60
-  # Number of processes to show in the top processes list
   process_count: 10
-  # Number of partitions to show in disk metrics
-  partition_count: 3
-  # Number of network interfaces to show in network metrics
-  interface_count: 3
-  
-# Default tab to show on startup
-default_tab: "system"  # Options: system, disk, network
-\`\`\`
+  compact_mode: false
 
-## Requirements
+theme: "dark"  # or "light"
+```
 
-- Python 3.7+
-- AMD CPU/GPU
-- Linux operating system
+## 🔍 Troubleshooting
 
-## Dependencies
+### Common Issues
 
-- textual: For the TUI interface
-- psutil: For system monitoring
-- matplotlib: For graph generation
-- numpy: For numerical operations
-- pillow: For image processing
-- pyamdgpu: For AMD GPU monitoring
-- pyyaml: For configuration file parsing
+1. **GPU Monitoring Not Working**
+   ```bash
+   # Check AMD driver
+   lsmod | grep amdgpu
+   
+   # Install driver if needed
+   sudo apt install amdgpu-pro  # Ubuntu
+   ```
 
-## Troubleshooting
+2. **Temperature Sensors**
+   ```bash
+   # Configure sensors
+   sudo sensors-detect --auto
+   sudo systemctl restart kmod
+   ```
 
-If you encounter issues with AMD GPU monitoring:
+3. **Permission Issues**
+   ```bash
+   # Add user to required groups
+   sudo usermod -aG video,input $USER
+   ```
 
-1. Make sure you have an AMD GPU installed
-2. Check that the appropriate AMD drivers are installed
-3. Verify that pyamdgpu is installed correctly
+## 📦 Dependencies
 
-If pyamdgpu is not available, the application will fall back to mock GPU data.
-\`\`\`
+Core:
+- Python ≥ 3.7
+- textual ≥ 0.27.0
+- psutil ≥ 5.9.0
+- matplotlib ≥ 3.5.0
+- pyamdgpu ≥ 0.2.0
+
+Optional:
+- notify2 ≥ 0.3.1 (notifications)
+- pytest ≥ 7.0.0 (testing)
+
+## 🛠️ Development
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest
+
+# Format code
+black .
+isort .
+
+# Type checking
+mypy .
+```
+
+## 📃 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 👥 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📞 Support
+
+- Create an [Issue](https://github.com/yourusername/amdtop/issues)
+- Join our [Discord](https://discord.gg/yourdiscord)
+- Email: support@amdtop.com
+
+## 🙏 Acknowledgments
+
+- [Textual](https://github.com/Textualize/textual) for the amazing TUI framework
+- [pyamdgpu](https://github.com/yourusername/pyamdgpu) for AMD GPU support
+````
 
 ```plaintext file="requirements.txt"
 textual>=0.27.0

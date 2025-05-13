@@ -3,252 +3,153 @@
 Temperature monitoring module for AMDTop
 Uses lm-sensors to get system temperatures
 """
-import os
-import time
+from typing import Dict, List, Tuple, Optional
 import subprocess
 import re
-from typing import Dict, List, Tuple, Optional
+import shutil
+from collections import deque
 
 class TemperatureMonitor:
     """
     Monitors system temperatures using lm-sensors
     """
     def __init__(self):
-        # Check if sensors command is available
+        """Initialize temperature monitor"""
         self.sensors_available = self._check_sensors_available()
+        if not self.sensors_available:
+            print("Warning: lm-sensors not found. Temperature monitoring disabled.")
+            
+        # Temperature data storage
+        self.temperatures: Dict[str, Dict[str, Tuple[float, Optional[float]]]] = {}
         
-        # Initialize data structures
-        self.sensors_data = {}  # sensor_name -> {temp_name -> (temp_value, critical_value)}
-        self.sensor_history = {}  # sensor_name -> {temp_name -> [values]}
-        self.max_history_points = 60  # Keep 60 data points for history
+        # History storage (last 60 readings for each sensor)
+        self.history: Dict[str, Dict[str, deque]] = {}
         
-        # Update immediately on initialization
-        if self.sensors_available:
-            self.update()
-    
+        # Maximum history length
+        self.max_history = 60
+        
+        # Update temperatures on init
+        self.update()
+
     def _check_sensors_available(self) -> bool:
-        """
-        Check if the sensors command is available
-        
-        Returns:
-            bool: True if sensors command is available, False otherwise
-        """
-        try:
-            # Try to run the sensors command
-            subprocess.run(["sensors"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            return True
-        except (subprocess.SubprocessError, FileNotFoundError):
-            print("Warning: 'sensors' command not found. Install lm-sensors package for temperature monitoring.")
-            return False
-    
+        """Check if lm-sensors is available"""
+        return shutil.which('sensors') is not None
+
     def update(self) -> None:
-        """
-        Update temperature data from sensors
-        """
+        """Update temperature readings"""
         if not self.sensors_available:
             return
-        
+            
         try:
-            # Run sensors command and get output
-            result = subprocess.run(["sensors"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            output = result.stdout
-            
-            # Parse the output
+            output = subprocess.check_output(['sensors'], 
+                                          text=True, 
+                                          stderr=subprocess.DEVNULL)
             self._parse_sensors_output(output)
-            
-            # Update history
             self._update_history()
-        except subprocess.SubprocessError as e:
-            print(f"Error running sensors command: {e}")
-    
+        except subprocess.SubprocessError:
+            print("Error running sensors command")
+
     def _parse_sensors_output(self, output: str) -> None:
-        """
-        Parse the output of the sensors command
+        """Parse the output from sensors command"""
+        current_adapter = None
+        temperatures = {}
         
-        Args:
-            output: Output string from sensors command
-        """
-        current_sensor = None
-        self.sensors_data = {}
+        for line in output.splitlines():
+            # Check for adapter
+            if "Adapter:" in line:
+                current_adapter = line.split(":")[1].strip()
+                temperatures[current_adapter] = {}
+                continue
+                
+            # Parse temperature readings
+            match = re.match(r'^([^:]+):\s+[+-]?([\d.]+)°C\s+\(high = [+-]?([\d.]+)°C\)?', line)
+            if match and current_adapter:
+                name, temp, high = match.groups()
+                name = name.strip()
+                temp = float(temp)
+                high = float(high) if high else None
+                temperatures[current_adapter][name] = (temp, high)
         
-        # Split output into lines
-        lines = output.strip().split('\n')
-        
-        for line in lines:
-            # Check if this is a sensor name line (no indentation)
-            if line and not line.startswith(' '):
-                current_sensor = line.strip()
-                self.sensors_data[current_sensor] = {}
-            
-            # Check if this is a temperature line
-            elif current_sensor and 'temp' in line.lower() and ':' in line:
-                # Extract temperature name and value
-                parts = line.split(':')
-                temp_name = parts[0].strip()
-                
-                # Extract temperature value and critical value if available
-                value_part = parts[1].strip()
-                
-                # Extract the temperature value
-                temp_value_match = re.search(r'([+-]?\d+\.\d+)°C', value_part)
-                if temp_value_match:
-                    temp_value = float(temp_value_match.group(1))
-                else:
-                    continue  # Skip if no temperature value found
-                
-                # Extract critical temperature if available
-                crit_value = None
-                crit_match = re.search(r'crit\s*=\s*([+-]?\d+\.\d+)°C', value_part)
-                if crit_match:
-                    crit_value = float(crit_match.group(1))
-                
-                # Store the temperature data
-                self.sensors_data[current_sensor][temp_name] = (temp_value, crit_value)
-    
+        self.temperatures = temperatures
+
     def _update_history(self) -> None:
-        """
-        Update temperature history
-        """
-        # Initialize history for new sensors
-        for sensor_name, temps in self.sensors_data.items():
-            if sensor_name not in self.sensor_history:
-                self.sensor_history[sensor_name] = {}
-            
-            for temp_name, (temp_value, _) in temps.items():
-                if temp_name not in self.sensor_history[sensor_name]:
-                    self.sensor_history[sensor_name][temp_name] = []
+        """Update temperature history"""
+        for adapter, readings in self.temperatures.items():
+            if adapter not in self.history:
+                self.history[adapter] = {}
                 
-                # Add current value to history
-                self.sensor_history[sensor_name][temp_name].append(temp_value)
-                
-                # Limit history length
-                if len(self.sensor_history[sensor_name][temp_name]) > self.max_history_points:
-                    self.sensor_history[sensor_name][temp_name] = self.sensor_history[sensor_name][temp_name][-self.max_history_points:]
-    
+            for name, (temp, _) in readings.items():
+                if name not in self.history[adapter]:
+                    self.history[adapter][name] = deque(maxlen=self.max_history)
+                self.history[adapter][name].append(temp)
+
     def get_all_temperatures(self) -> Dict[str, Dict[str, Tuple[float, Optional[float]]]]:
-        """
-        Get all temperature data
-        
-        Returns:
-            Dict mapping sensor names to dicts of temperature names to (value, critical) tuples
-        """
-        return self.sensors_data
-    
+        """Get all temperature readings"""
+        return self.temperatures
+
     def get_temperature_history(self, sensor_name: str, temp_name: str) -> List[float]:
-        """
-        Get temperature history for a specific sensor and temperature
-        
-        Args:
-            sensor_name: Name of the sensor
-            temp_name: Name of the temperature
-            
-        Returns:
-            List of temperature values
-        """
-        if sensor_name in self.sensor_history and temp_name in self.sensor_history[sensor_name]:
-            return self.sensor_history[sensor_name][temp_name]
+        """Get temperature history for a specific sensor"""
+        if sensor_name in self.history and temp_name in self.history[sensor_name]:
+            return list(self.history[sensor_name][temp_name])
         return []
-    
+
     def get_cpu_temperature(self) -> Optional[float]:
-        """
-        Get the CPU temperature (tries to find the most relevant CPU temperature)
+        """Get CPU temperature (tries different common sensor names)"""
+        cpu_sensors = [
+            ('k10temp-*', 'Tctl'),         # AMD Ryzen
+            ('coretemp-*', 'Package id 0'), # Intel
+            ('zenpower-*', 'Tctl'),        # AMD Zen
+        ]
         
-        Returns:
-            CPU temperature or None if not available
-        """
-        # Look for CPU temperature in different possible sensor names
-        cpu_sensors = [s for s in self.sensors_data.keys() if 'cpu' in s.lower() or 'k10temp' in s.lower() or 'coretemp' in s.lower()]
-        
-        for sensor in cpu_sensors:
-            # Look for the most relevant temperature (Tdie, Tctl, or Package)
-            for temp_name in ['Tdie', 'Tctl', 'Package id 0', 'Core 0']:
-                if temp_name in self.sensors_data[sensor]:
-                    return self.sensors_data[sensor][temp_name][0]
-            
-            # If specific names not found, look for any temperature
-            for temp_name, (temp_value, _) in self.sensors_data[sensor].items():
-                if 'temp' in temp_name.lower():
-                    return temp_value
-        
+        for adapter in self.temperatures:
+            for sensor_pattern, temp_name in cpu_sensors:
+                if re.match(sensor_pattern, adapter):
+                    readings = self.temperatures[adapter]
+                    if temp_name in readings:
+                        return readings[temp_name][0]
         return None
-    
+
     def get_motherboard_temperature(self) -> Optional[float]:
-        """
-        Get the motherboard temperature
+        """Get motherboard temperature"""
+        mb_sensors = ['it8620-*', 'nct6775-*']
         
-        Returns:
-            Motherboard temperature or None if not available
-        """
-        # Look for motherboard temperature in different possible sensor names
-        mb_sensors = [s for s in self.sensors_data.keys() if 'motherboard' in s.lower() or 'asus' in s.lower() or 'gigabyte' in s.lower() or 'msi' in s.lower()]
-        
-        for sensor in mb_sensors:
-            # Look for the most relevant temperature
-            for temp_name, (temp_value, _) in self.sensors_data[sensor].items():
-                if 'temp' in temp_name.lower() or 'mb' in temp_name.lower():
-                    return temp_value
-        
+        for adapter in self.temperatures:
+            for sensor_pattern in mb_sensors:
+                if re.match(sensor_pattern, adapter):
+                    # Look for likely motherboard temp sensors
+                    for name, (temp, _) in self.temperatures[adapter].items():
+                        if 'SYSTIN' in name or 'Board' in name:
+                            return temp
         return None
-    
-    def get_important_temperatures(self) -> Dict[str, float]:
-        """
-        Get the most important temperatures (CPU, GPU, motherboard)
-        
-        Returns:
-            Dict mapping temperature names to values
-        """
-        important_temps = {}
-        
-        # Get CPU temperature
-        cpu_temp = self.get_cpu_temperature()
-        if cpu_temp is not None:
-            important_temps['CPU'] = cpu_temp
-        
-        # Get motherboard temperature
-        mb_temp = self.get_motherboard_temperature()
-        if mb_temp is not None:
-            important_temps['Motherboard'] = mb_temp
-        
-        # Add other important temperatures
-        for sensor_name, temps in self.sensors_data.items():
-            # Add GPU temperature if found
-            if 'gpu' in sensor_name.lower() or 'nvidia' in sensor_name.lower() or 'amdgpu' in sensor_name.lower():
-                for temp_name, (temp_value, _) in temps.items():
-                    if 'temp' in temp_name.lower():
-                        important_temps[f'GPU ({sensor_name})'] = temp_value
-                        break
-            
-            # Add NVMe or SSD temperatures if found
-            if 'nvme' in sensor_name.lower() or 'ssd' in sensor_name.lower():
-                for temp_name, (temp_value, _) in temps.items():
-                    if 'temp' in temp_name.lower():
-                        important_temps[f'Storage ({sensor_name})'] = temp_value
-                        break
-        
-        return important_temps
+
+    def print_all_temperatures(self) -> None:
+        """Print all temperature readings (for debugging)"""
+        for adapter, readings in self.temperatures.items():
+            print(f"\nAdapter: {adapter}")
+            for name, (temp, high) in readings.items():
+                high_str = f" (High = {high}°C)" if high else ""
+                print(f"  {name}: {temp}°C{high_str}")
 
 # Test the module if run directly
 if __name__ == "__main__":
     monitor = TemperatureMonitor()
     
-    if not monitor.sensors_available:
-        print("lm-sensors not available. Please install it to use temperature monitoring.")
-        exit(1)
-    
-    # Update a few times to get meaningful data
-    for _ in range(3):
-        monitor.update()
-        time.sleep(1)
-    
-    # Print important temperatures
-    print("Important temperatures:")
-    for name, temp in monitor.get_important_temperatures().items():
-        print(f"{name}: {temp}°C")
-    
-    # Print all temperatures
+    print("Testing temperature monitor...")
     print("\nAll temperatures:")
-    for sensor_name, temps in monitor.get_all_temperatures().items():
-        print(f"{sensor_name}:")
-        for temp_name, (temp_value, crit_value) in temps.items():
-            crit_str = f" (Critical: {crit_value}°C)" if crit_value else ""
-            print(f"  {temp_name}: {temp_value}°C{crit_str}")
+    monitor.print_all_temperatures()
+    
+    print("\nCPU temperature:", monitor.get_cpu_temperature())
+    print("Motherboard temperature:", monitor.get_motherboard_temperature())
+    
+    # Test history
+    print("\nUpdating temperatures multiple times...")
+    for _ in range(5):
+        monitor.update()
+    
+    if monitor.temperatures:
+        # Get first available sensor and temp name
+        adapter = next(iter(monitor.temperatures))
+        temp_name = next(iter(monitor.temperatures[adapter]))
+        history = monitor.get_temperature_history(adapter, temp_name)
+        print(f"\nTemperature history for {adapter} {temp_name}:")
+        print(history)

@@ -1,35 +1,33 @@
-# AMDTop Configuration File
-
-# Update intervals (in seconds)
 intervals:
-  # How often to update the graphs and metrics
   graphs: 1.0
   processes: 2.0
-  
-# Colors for graphs and UI elements
+  temperature: 5.0
+  network: 1.0
 colors:
-  # Graph colors
-  cpu_graph: "green"
-  gpu_graph: "red"
-  memory_graph: "blue"
-  disk_read: "blue"
-  disk_write: "red"
-  network_download: "green"
-  network_upload: "orange"
-  
-# Display settings
+  cpu_graph: green
+  gpu_graph: red
+  memory_graph: blue
+  disk_read: blue
+  disk_write: red
+  network_download: green
+  network_upload: orange
+  temperature: orange
+  warning: yellow
+  error: red
 display:
-  # Number of data points to keep in graphs (history length)
   graph_history: 60
-  # Number of processes to show in the top processes list
   process_count: 10
-  # Number of partitions to show in disk metrics
   partition_count: 3
-  # Number of network interfaces to show in network metrics
   interface_count: 3
-  
-# Default tab to show on startup
-default_tab: "system"  # Options: system, disk, network, temperature
-
-# Theme setting
-theme: "dark"  # Options: dark, light
+  show_gpu: true
+  show_temperature: true
+  compact_mode: false
+alerts:
+  cpu_temp_warning: 70
+  cpu_temp_critical: 85
+  gpu_temp_warning: 75
+  gpu_temp_critical: 90
+  enable_notifications: true
+default_tab: system
+theme: dark
+log_level: INFO

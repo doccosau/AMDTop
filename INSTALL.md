@@ -1,131 +1,185 @@
-# AMDTop Installation Guide
-
+#!/bin/bashstallation Guide
+# AMDTop Installation Script
 This guide will help you install and run AMDTop on your system.
+set -e  # Exit on error
 
-## Prerequisites
-
-- Python 3.7 or higher
-- Linux operating system (Ubuntu, Fedora, Arch, etc.)
-- For AMD GPU monitoring: AMD GPU with appropriate drivers
-- For temperature monitoring: lm-sensors package
-
-## Installation Steps
-
-### 1. Clone the Repository
-
-\`\`\`bash
-git clone https://github.com/yourusername/amdtop.git
+# Color definitions
+readonly BLUE='\e[1;34m' Python 3.7 or higher
+readonly RED='\e[1;31m'- Linux operating system (Ubuntu, Fedora, Arch, etc.)
+readonly GREEN='\e[1;32m'D GPU with appropriate drivers
+readonly YELLOW='\e[1;33m're monitoring: lm-sensors package
+readonly NC='\e[0m'  # No Color
+# Installation Steps
+# Configuration
+readonly MIN_PYTHON_VERSION="3.7.0"
+readonly INSTALL_DIR="$HOME/.local/bin"
+readonly CONFIG_DIR="$HOME/.config/amdtop"
+readonly DESKTOP_ENTRY_DIR="$HOME/.local/share/applications"it clone https://github.com/yourusername/amdtop.git
 cd amdtop
-\`\`\`
+# Function to display messages
+print_message() {
+    echo -e "${BLUE}$1${NC}"tional but Recommended)
+}
 
-### 2. Create a Virtual Environment (Optional but Recommended)
-
-\`\`\`bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-\`\`\`
-
+# Function to display errorson -m venv venv
+print_error() {
+    echo -e "${RED}ERROR: $1${NC}" >&2
+}
 ### 3. Install Dependencies
+# Function to display success messages
+print_success() {
+    echo -e "${GREEN}$1${NC}"xt
+}
 
-\`\`\`bash
-pip install -r requirements.txt
-\`\`\`
+# Function to display warnings
+print_warning() {
+    echo -e "${YELLOW}WARNING: $1${NC}"## For Temperature Monitoring (lm-sensors)
+}
 
-### 4. Install System Dependencies
+# Function to check Python version
+check_python_version() {
+    local python_versionsudo apt-get install lm-sensors
+    if ! python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))'); thenauto  # Configure sensors
+        print_error "Python 3 is not installed"
+        exit 1
+    fi
+    \`bash
+    if ! python3 -c "from packaging import version; exit(0 if version.parse('$python_version') >= version.parse('$MIN_PYTHON_VERSION') else 1)"; then
+        print_error "Python $MIN_PYTHON_VERSION or higher is required (found $python_version)"rs-detect --auto  # Configure sensors
+        exit 1\`\`
+    fi
+    
+    print_success "Found Python $python_version"
+}
 
-#### For Temperature Monitoring (lm-sensors)
+# Function to setup virtual environment\`
+setup_venv() {
+    print_message "Setting up virtual environment..." For AMD GPU Monitoring
+    
+    if [ -d "venv" ]; then installed for your GPU.
+        print_warning "Existing virtual environment found. Removing..."
+        rm -rf venv
+    fi
+    
+    if ! python3 -m venv venv; then
+        print_error "Failed to create virtual environment"
+        exit 1
+    fin the current directory. You can edit this file to customize AMDTop.
+    
+    source venv/bin/activate
+    pip install --upgrade pip setuptools wheel
+}
 
-On Ubuntu/Debian:
-\`\`\`bash
-sudo apt-get update
-sudo apt-get install lm-sensors
-sudo sensors-detect --auto  # Configure sensors
-\`\`\`
+# Function to install system dependencies
+install_system_deps() {
+    print_message "Checking system dependencies..."
+    
+    # Detect distributioning a Custom Configuration File
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case $ID inml
+            ubuntu|debian)
+                sudo apt-get update
+                sudo apt-get install -y lm-sensors python3-dev build-essential
+                ;;
+            fedora)e configuration file is in YAML format and can be found in one of these locations (in order of precedence):
+                sudo dnf install -y lm_sensors python3-devel gcc
+                ;;` or `--config` command line option
+            arch|manjaro)
+                sudo pacman -Sy --noconfirm lm_sensors python-pip gccig.yaml` (user's home directory)
+                ;;configuration)
+            *)
+                print_warning "Unsupported distribution: $ID. Please install dependencies manually."Configuration Options
+                ;;
+        esac\`\`yaml
+    else# Update intervals (in seconds)
+        print_warning "Could not detect distribution. Please install dependencies manually."
+    fitrics
+}
 
-On Fedora:
-\`\`\`bash
-sudo dnf install lm_sensors
-sudo sensors-detect --auto  # Configure sensors
-\`\`\`
+# Function to create launcher script
+create_launcher() {r graphs and UI elements
+    print_message "Creating launcher script..."
+    
+    mkdir -p "$INSTALL_DIR""green"
+    cat > "$INSTALL_DIR/amdtop" << EOFd"
+#!/bin/bash
+# AMDTop launcher scriptisk_read: "blue"
+AMDTOP_DIR="$(pwd)"
+source "\$AMDTOP_DIR/venv/bin/activate"  network_download: "green"
+exec python3 "\$AMDTOP_DIR/amdtop.py" "\$@"
+EOF
+    
+    chmod +x "$INSTALL_DIR/amdtop"
+    print_success "Launcher script created at $INSTALL_DIR/amdtop"s to keep in graphs (history length)
+}tory: 60
+to show in the top processes list
+# Function to create desktop entry
+create_desktop_entry() { Number of partitions to show in disk metrics
+    print_message "Creating desktop entry..."nt: 3
+    rics
+    mkdir -p "$DESKTOP_ENTRY_DIR"  interface_count: 3
+    cat > "$DESKTOP_ENTRY_DIR/amdtop.desktop" << EOF
+[Desktop Entry]
+Name=AMDTopptions: system, disk, network, temperature
+GenericName=System Monitor
+Comment=AMD CPU/GPU monitoring tool
+Exec=$INSTALL_DIR/amdtoptheme: "dark"  # Options: dark, light
 
-On Arch Linux:
-\`\`\`bash
-sudo pacman -S lm_sensors
-sudo sensors-detect --auto  # Configure sensors
-\`\`\`
 
-#### For AMD GPU Monitoring
 
-Ensure you have the appropriate AMD drivers installed for your GPU.
 
-### 5. Create a Default Configuration
 
-\`\`\`bash
-python amdtop.py --create-config
-\`\`\`
 
-This will create a default configuration file in the current directory. You can edit this file to customize AMDTop.
 
-## Running AMDTop
 
-### Basic Usage
 
-\`\`\`bash
-python amdtop.py
-\`\`\`
 
-### Using a Custom Configuration File
 
-\`\`\`bash
-python amdtop.py -c /path/to/your/config.yaml
-\`\`\`
 
-## Configuration
 
-The configuration file is in YAML format and can be found in one of these locations (in order of precedence):
 
-1. Path specified with the `-c` or `--config` command line option
-2. `./config.yaml` (current directory)
-3. `~/.config/amdtop/config.yaml` (user's home directory)
-4. `/etc/amdtop/config.yaml` (system-wide configuration)
 
-### Configuration Options
 
-\`\`\`yaml
-# Update intervals (in seconds)
-intervals:
-  # How often to update the graphs and metrics
-  graphs: 1.0
-  processes: 2.0
-  
-# Colors for graphs and UI elements
-colors:
-  # Graph colors
-  cpu_graph: "green"
-  gpu_graph: "red"
-  memory_graph: "blue"
-  disk_read: "blue"
-  disk_write: "red"
-  network_download: "green"
-  network_upload: "orange"
-  
-# Display settings
-display:
-  # Number of data points to keep in graphs (history length)
-  graph_history: 60
-  # Number of processes to show in the top processes list
-  process_count: 10
-  # Number of partitions to show in disk metrics
-  partition_count: 3
-  # Number of network interfaces to show in network metrics
-  interface_count: 3
-  
-# Default tab to show on startup
-default_tab: "system"  # Options: system, disk, network, temperature
 
-# Theme setting
-theme: "dark"  # Options: dark, light
-\`\`\`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+main "$@"# Run main installation}    print_message "\nOr launch it from your application menu."    print_message "  amdtop"    print_message "\nYou can now run AMDTop using:"    print_success "Installation completed successfully!"        create_desktop_entry    create_launcher    # Create launcher and desktop entry        fi        print_warning "Configuration file already exists, skipping..."    else        python3 -c "from amdtop.config_loader import create_default_config; create_default_config('$CONFIG_DIR/config.yaml')"    if [ ! -f "$CONFIG_DIR/config.yaml" ]; then    mkdir -p "$CONFIG_DIR"    print_message "Creating configuration..."    # Create configuration        pip install -e .    print_message "Installing AMDTop..."    # Install the package        pip install -r requirements.txt    print_message "Installing Python dependencies..."    # Install Python dependencies        setup_venv    # Setup Python environment        install_system_deps    check_python_version    # Check requirements        print_message "Starting AMDTop installation..."main() {# Main installation process}    fi        update-desktop-database "$DESKTOP_ENTRY_DIR"    if command -v update-desktop-database >/dev/null; then    # Update desktop database    EOFIcon=$(pwd)/icons/amdtop.pngKeywords=system;monitor;cpu;gpu;amd;Categories=System;Monitor;Type=ApplicationTerminal=true\`\`\`
 
 ## Keyboard Shortcuts
 
