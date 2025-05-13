@@ -46,7 +46,7 @@ sudo pacman -S python-pip lm_sensors
 
 1. **Clone and Install**
 ```bash
-git clone https://github.com/yourusername/amdtop.git
+git clone https://github.com/doccosau/AMDTop.git
 cd amdtop
 ./install.sh
 ```
